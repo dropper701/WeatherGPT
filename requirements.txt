@@ -2,6 +2,6 @@ fastapi
 uvicorn[standard]
 requests
 python-dotenv
-google-genai
 jinja2
 pydantic
+groq
