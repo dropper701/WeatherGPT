@@ -156,12 +156,8 @@ def get_weather(city: str):
             params={
                 "latitude": location["latitude"],
                 "longitude": location["longitude"],
-                "current": (
-                    "temperature_2m,"
-                    "relative_humidity_2m,"
-                    "wind_speed_10m,"
-                    "weather_code"
-                ),
+                "current": "temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code",
+                    
                 "timezone": "auto"
             },
             timeout=10
@@ -234,12 +230,7 @@ def get_forecast(city: str):
             params={
                 "latitude": location["latitude"],
                 "longitude": location["longitude"],
-                "daily": (
-                    "temperature_2m_max,"
-                    "temperature_2m_min,"
-                    "precipitation_probability_max,"
-                    "weather_code"
-                ),
+                "daily":"temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code",
                 "forecast_days": 2,
                 "timezone": "auto"
             },
@@ -312,12 +303,7 @@ def get_7day_forecast(city: str):
             params={
                 "latitude": location["latitude"],
                 "longitude": location["longitude"],
-                "daily": (
-                    "weather_code,"
-                    "temperature_2m_max,"
-                    "temperature_2m_min,"
-                    "precipitation_probability_max"
-                ),
+                "daily":"weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
                 "forecast_days": 7,
                 "timezone": "auto"
             },
