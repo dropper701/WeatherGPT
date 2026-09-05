@@ -1,6 +1,7 @@
 import os
 import re
 import requests
+import time
 
 from dotenv import load_dotenv
 from groq import Groq
@@ -9,6 +10,7 @@ from pydantic import BaseModel
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+
 
 
 # =========================================
@@ -91,7 +93,9 @@ def home(request: Request):
 # =========================================
 # HELPER: LOCATION
 # =========================================
+from functools import lru_cache
 
+@lru_cache(maxsize=100)
 def get_location(city: str):
 
     url = "https://geocoding-api.open-meteo.com/v1/search"
@@ -134,14 +138,96 @@ def get_location(city: str):
         print("LOCATION DATA ERROR:", e)
         return None
 
+client = Groq(api_key=GROQ_API_KEY)
+MODEL = "groq/compound-mini"
 
+
+# -----------------------------
+# WEATHER CACHE
+# -----------------------------
+weather_cache = {}
+forecast_cache = {}
+
+WEATHER_CACHE_SECONDS = 300
+FORECAST_CACHE_SECONDS = 1800
+
+
+# -----------------------------
+# LOCATION
+# -----------------------------
+@lru_cache(maxsize=100)
+def get_location(city: str):
+    city = city.strip()
+
+    url = "https://geocoding-api.open-meteo.com/v1/search"
+
+    try:
+        response = requests.get(
+            url,
+            params={
+                "name": city,
+                "count": 5,
+                "language": "en",
+                "format": "json"
+            },
+            timeout=10
+        )
+
+        response.raise_for_status()
+
+        data = response.json()
+        results = data.get("results", [])
+
+        if not results:
+            print("LOCATION NOT FOUND:", city)
+            return None
+
+        # Prefer an actual city/town result
+        for result in results:
+            if result.get("name", "").lower() == city.lower():
+                return {
+                    "name": result.get("name"),
+                    "latitude": result.get("latitude"),
+                    "longitude": result.get("longitude"),
+                    "country": result.get("country", "")
+                }
+
+        # Otherwise use the first result
+        result = results[0]
+
+        return {
+            "name": result.get("name"),
+            "latitude": result.get("latitude"),
+            "longitude": result.get("longitude"),
+            "country": result.get("country", "")
+        }
+
+    except requests.RequestException as e:
+        print("GEOCODING ERROR:", e)
+        return None
+
+    except Exception as e:
+        print("LOCATION ERROR:", e)
+        return None
 # =========================================
 # CURRENT WEATHER
 # =========================================
-
 def get_weather(city: str):
 
-    location = get_location(city)
+    city_key = city.strip().lower()
+
+    # Check cache
+    cached = weather_cache.get(city_key)
+
+    if cached:
+
+        cached_time, cached_result = cached
+
+        if time.time() - cached_time < WEATHER_CACHE_SECONDS:
+            print("Using cached weather for:", city_key)
+            return cached_result
+
+    location = get_location(city_key)
 
     if not location:
         return {
@@ -151,17 +237,29 @@ def get_weather(city: str):
     url = "https://api.open-meteo.com/v1/forecast"
 
     try:
+
         response = requests.get(
             url,
             params={
                 "latitude": location["latitude"],
                 "longitude": location["longitude"],
                 "current": "temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code",
-                    
                 "timezone": "auto"
             },
-            timeout=10
+            timeout=15
         )
+
+        # Handle rate limit
+        if response.status_code == 429:
+
+            print("OPEN-METEO WEATHER RATE LIMIT")
+
+            return {
+                "reply": (
+                    "⚠️ The weather service is temporarily busy. "
+                    "Please wait a little and try again."
+                )
+            }
 
         response.raise_for_status()
 
@@ -170,25 +268,45 @@ def get_weather(city: str):
         current = data.get("current")
 
         if not current:
-            print("OPEN-METEO RESPONSE:", data)
+
+            print("OPEN-METEO WEATHER RESPONSE:", data)
+
             return {
-                "reply": "⚠️ Current weather data is unavailable right now."
+                "reply": (
+                    "⚠️ Current weather data is "
+                    "unavailable right now."
+                )
             }
 
-        weather_code = current.get("weather_code", -1)
+        weather_code = current.get(
+            "weather_code",
+            -1
+        )
 
         icon, condition = weather_condition.get(
             weather_code,
             ("🌦️", "Unknown weather")
         )
 
-        temperature = current.get("temperature_2m", "N/A")
-        humidity = current.get("relative_humidity_2m", "N/A")
-        wind = current.get("wind_speed_10m", "N/A")
+        temperature = current.get(
+            "temperature_2m",
+            "N/A"
+        )
 
-        return {
+        humidity = current.get(
+            "relative_humidity_2m",
+            "N/A"
+        )
+
+        wind = current.get(
+            "wind_speed_10m",
+            "N/A"
+        )
+
+        result = {
             "reply": (
-                f"{icon} Weather in {location['name']}:\n\n"
+                f"{icon} Weather in "
+                f"{location['name']}:\n\n"
                 f"{condition}\n"
                 f"🌡️ Temperature: {temperature}°C\n"
                 f"💧 Humidity: {humidity}%\n"
@@ -196,16 +314,184 @@ def get_weather(city: str):
             )
         }
 
+        # Save result in cache
+        weather_cache[city_key] = (
+            time.time(),
+            result
+        )
+
+        return result
+
     except requests.RequestException as e:
+
         print("WEATHER REQUEST ERROR:", e)
+
         return {
-            "reply": "⚠️ I couldn't connect to the weather service right now."
+            "reply": (
+                "⚠️ I couldn't connect to the "
+                "weather service right now."
+            )
         }
 
     except (KeyError, ValueError, TypeError) as e:
+
         print("WEATHER DATA ERROR:", e)
+
         return {
-            "reply": "⚠️ The weather service returned unexpected data."
+            "reply": (
+                "⚠️ The weather service returned "
+                "unexpected data."
+            )
+        }
+
+
+# =========================================
+# TOMORROW WEATHER
+# =========================================
+
+def get_forecast(city: str):
+
+    city_key = city.strip().lower()
+
+    # Check cache
+    cached = forecast_cache.get(
+        f"tomorrow:{city_key}"
+    )
+
+    if cached:
+
+        cached_time, cached_result = cached
+
+        if (
+            time.time() - cached_time
+            < FORECAST_CACHE_SECONDS
+        ):
+            print(
+                "Using cached tomorrow forecast for:",
+                city_key
+            )
+
+            return cached_result
+
+    location = get_location(city_key)
+
+    if not location:
+        return {
+            "reply": f"❌ I couldn't find the city '{city}'."
+        }
+
+    url = "https://api.open-meteo.com/v1/forecast"
+
+    try:
+
+        response = requests.get(
+            url,
+            params={
+                "latitude": location["latitude"],
+                "longitude": location["longitude"],
+                "daily": (
+                    "temperature_2m_max,"
+                    "temperature_2m_min,"
+                    "precipitation_probability_max,"
+                    "weather_code"
+                ),
+                "forecast_days": 2,
+                "timezone": "auto"
+            },
+            timeout=15
+        )
+
+        # Rate limit
+        if response.status_code == 429:
+
+            print("OPEN-METEO FORECAST RATE LIMIT")
+
+            return {
+                "reply": (
+                    "⚠️ The weather service is temporarily busy. "
+                    "Please wait a little and try again."
+                )
+            }
+
+        response.raise_for_status()
+
+        data = response.json()
+
+        daily = data.get("daily")
+
+        if not daily:
+            return {
+                "reply": (
+                    "⚠️ Tomorrow's forecast is "
+                    "unavailable right now."
+                )
+            }
+
+        weather_code = daily["weather_code"][1]
+
+        icon, condition = weather_condition.get(
+            weather_code,
+            ("🌦️", "Unknown weather")
+        )
+
+        max_temp = daily[
+            "temperature_2m_max"
+        ][1]
+
+        min_temp = daily[
+            "temperature_2m_min"
+        ][1]
+
+        rain = daily[
+            "precipitation_probability_max"
+        ][1]
+
+        result = {
+            "reply": (
+                f"{icon} Tomorrow's weather in "
+                f"{location['name']}:\n\n"
+                f"{condition}\n"
+                f"🌡️ Maximum: {max_temp}°C\n"
+                f"🌡️ Minimum: {min_temp}°C\n"
+                f"🌧️ Rain probability: {rain}%"
+            )
+        }
+
+        # Save result
+        forecast_cache[
+            f"tomorrow:{city_key}"
+        ] = (
+            time.time(),
+            result
+        )
+
+        return result
+
+    except requests.RequestException as e:
+
+        print("FORECAST REQUEST ERROR:", e)
+
+        return {
+            "reply": (
+                "⚠️ I couldn't connect to the "
+                "weather service right now."
+            )
+        }
+
+    except (
+        KeyError,
+        ValueError,
+        TypeError,
+        IndexError
+    ) as e:
+
+        print("FORECAST DATA ERROR:", e)
+
+        return {
+            "reply": (
+                "⚠️ Tomorrow's forecast is "
+                "unavailable right now."
+            )
         }
 
 
