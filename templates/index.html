@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WeatherGpt</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app">
+        <!--Header-->
+        <header>
+            <div class="logo">🌦️</div>
+
+            <div>
+                <h1>WeatherGpt</h1>
+                <p>Your Multilingual Weather Assistant</p>
+            </div>    
+        </header>
+        <!--CHAT AREA-->
+        <main class="chat-container" id="chat-container">
+            <div class="message bot-message">
+                <div class ="avatar">🌦️</div>
+                <div class="message-text">
+                    Hello! I'm WeatherGpt.
+                    <br><br>
+                    Ask me about weather,forecasts,alerts,or farming advice in your preferred language!
+                </div>
+            
+                     
+            </div>
+        </main>
+
+        <!--Input Area-->
+        <div class="input-container">
+            <input
+            type="text"
+            id="user-input"
+            placeholder="Ask about weather..."
+            >
+            <button id="send-button">
+                Send ➤
+            </button>
+        </div>
+    </div>
+    <script src="/static/script.js"></script>
+</body>
+</html>
