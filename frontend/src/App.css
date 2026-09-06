@@ -1,0 +1,899 @@
+body {
+  margin: 0;
+  background: #0b0d10;
+  color: white;
+  font-family: Arial, sans-serif;
+}
+
+.app {
+  min-height: 100vh;
+}
+
+.weather-panel {
+  width: 500px;
+  min-height: 500px;
+  margin: 40px auto;
+  padding: 35px;
+  box-sizing: border-box;
+
+  background: linear-gradient(
+    145deg,
+    #6fa9cb,
+    #a9c8c4,
+    #efd47b
+  );
+
+  border-radius: 6px;
+  position: relative;
+  overflow: hidden;
+}
+
+.weather-location {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.weather-temperature {
+  font-size: 110px;
+  font-weight: 300;
+  margin-top: 70px;
+}
+
+.weather-condition {
+  font-size: 28px;
+  font-weight: 600;
+  font-style: italic;
+  margin-top: -15px;
+}
+
+.weather-description {
+  margin-top: 12px;
+  font-size: 16px;
+  max-width: 300px;
+  line-height: 1.5;
+}
+
+.weather-stats {
+  display: flex;
+  gap: 50px;
+  margin-top: 60px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.weather-stats div {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.weather-stats span {
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+.weather-stats strong {
+  font-size: 18px;
+}
+.main-layout {
+  display: flex;
+  gap: 0;
+  max-width: 1050px;
+  margin: 30px auto;
+  padding: 0 20px;
+}
+
+.main-layout .weather-panel {
+  margin: 0;
+  width: 52%;
+}
+
+.chat-panel {
+  width: 48%;
+  min-height: 500px;
+  padding: 35px;
+  box-sizing: border-box;
+  background: #0f1216;
+  border: 1px solid #252b33;
+  border-left: none;
+}
+.app-header {
+  max-width: 1050px;
+  margin: 0 auto;
+  padding: 25px 20px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  border-bottom: 1px solid #252b33;
+}
+
+.logo {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.logo span {
+  color: #8ecae6;
+}
+
+.weather-nav {
+  display: flex;
+  gap: 8px;
+}
+
+.weather-nav button {
+  background: transparent;
+  border: none;
+  color: #8b929c;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  border-radius: 20px;
+}
+
+.weather-nav button:hover {
+  background: #1a1f25;
+  color: white;
+}
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-header {
+  border-bottom: 1px solid #252b33;
+  padding-bottom: 20px;
+}
+
+.chat-header h2 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.chat-header span {
+  display: block;
+  margin-top: 6px;
+  color: #777f89;
+  font-size: 13px;
+}
+
+.chat-content {
+  flex: 1;
+  padding-top: 30px;
+}
+
+.chat-intro {
+  color: #c8cdd3;
+  line-height: 1.6;
+}
+
+.suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 30px;
+}
+
+.suggestions button {
+  text-align: left;
+  padding: 14px 16px;
+  border: 1px solid #2a3038;
+  border-radius: 10px;
+  background: #15191e;
+  color: #dce1e6;
+  cursor: pointer;
+}
+
+.suggestions button:hover {
+  background: #1d232a;
+}
+
+.chat-input {
+  display: flex;
+  gap: 10px;
+  margin-top: 30px;
+}
+
+.chat-input input {
+  flex: 1;
+  padding: 15px;
+  border: 1px solid #2a3038;
+  border-radius: 10px;
+  background: #15191e;
+  color: white;
+  outline: none;
+}
+
+.chat-input button {
+  width: 50px;
+  border: none;
+  border-radius: 10px;
+  background: #dce1e6;
+  color: #111;
+  font-size: 20px;
+  cursor: pointer;
+}
+.tomorrow-card {
+  margin-top: 25px;
+  padding: 20px;
+  border: 1px solid #2a3038;
+  border-radius: 14px;
+  background: #15191e;
+}
+
+.tomorrow-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.tomorrow-icon {
+  font-size: 42px;
+  margin-top: 12px;
+}
+
+.tomorrow-condition {
+  font-size: 18px;
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.tomorrow-temperatures {
+  font-size: 24px;
+  margin-top: 12px;
+}
+
+.tomorrow-rain {
+  margin-top: 10px;
+  color: #aeb6c0;
+}
+
+.weekly-forecast {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-top: 25px;
+}
+
+.forecast-card {
+  padding: 14px;
+  border: 1px solid #2a3038;
+  border-radius: 12px;
+  background: #15191e;
+}
+
+.forecast-date {
+  font-size: 12px;
+  color: #7f8994;
+}
+
+.forecast-icon {
+  font-size: 30px;
+  margin-top: 8px;
+}
+
+.forecast-condition {
+  font-size: 13px;
+  margin-top: 5px;
+}
+
+.forecast-temperature {
+  margin-top: 10px;
+  font-size: 16px;
+}
+
+.forecast-rain {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #8f99a5;
+}
+/* =========================================
+   DYNAMIC TIME ATMOSPHERE
+   ========================================= */
+
+.app {
+  min-height: 100vh;
+  background: #0b0d12;
+  transition: background 1.5s ease;
+}
+
+/* -------------------------
+   MORNING
+------------------------- */
+
+.app.morning {
+  background:
+    radial-gradient(
+      circle at 20% 15%,
+      rgba(255, 190, 120, 0.22),
+      transparent 35%
+    ),
+    linear-gradient(
+      135deg,
+      #10151d 0%,
+      #18212a 50%,
+      #101217 100%
+    );
+}
+
+.app.morning .weather-panel {
+  background:
+    radial-gradient(
+      circle at 30% 20%,
+      rgba(255, 210, 140, 0.30),
+      transparent 40%
+    ),
+    linear-gradient(
+      160deg,
+      #7baec6,
+      #b7d0ca,
+      #ded694
+    );
+}
+
+.app.morning .chat-panel {
+  background: rgba(18, 23, 30, 0.78);
+}
+
+
+/* -------------------------
+   AFTERNOON
+------------------------- */
+
+.app.afternoon {
+  background:
+    radial-gradient(
+      circle at 22% 15%,
+      rgba(255, 210, 100, 0.20),
+      transparent 32%
+    ),
+    linear-gradient(
+      135deg,
+      #11151a,
+      #16202a,
+      #0b0e12
+    );
+}
+
+.app.afternoon .weather-panel {
+  background:
+    radial-gradient(
+      circle at 70% 15%,
+      rgba(255, 215, 110, 0.30),
+      transparent 35%
+    ),
+    linear-gradient(
+      160deg,
+      #75abc7,
+      #a9ceca,
+      #e4d77e
+    );
+}
+
+.app.afternoon .chat-panel {
+  background: rgba(15, 19, 24, 0.78);
+}
+
+
+/* -------------------------
+   EVENING
+------------------------- */
+
+.app.evening {
+  background:
+    radial-gradient(
+      circle at 25% 20%,
+      rgba(245, 130, 90, 0.20),
+      transparent 32%
+    ),
+    radial-gradient(
+      circle at 80% 20%,
+      rgba(150, 100, 210, 0.15),
+      transparent 35%
+    ),
+    linear-gradient(
+      135deg,
+      #11131b,
+      #1a1725,
+      #090b10
+    );
+}
+
+.app.evening .weather-panel {
+  background:
+    radial-gradient(
+      circle at 25% 20%,
+      rgba(255, 170, 90, 0.35),
+      transparent 35%
+    ),
+    linear-gradient(
+      160deg,
+      #567fa5,
+      #816c8b,
+      #d08b67
+    );
+}
+
+.app.evening .chat-panel {
+  background: rgba(19, 17, 25, 0.82);
+}
+
+
+/* -------------------------
+   NIGHT
+------------------------- */
+
+.app.night {
+  background:
+    radial-gradient(
+      circle at 25% 15%,
+      rgba(85, 110, 220, 0.25),
+      transparent 35%
+    ),
+    radial-gradient(
+      circle at 80% 30%,
+      rgba(110, 80, 190, 0.13),
+      transparent 32%
+    ),
+    linear-gradient(
+      135deg,
+      #080b12,
+      #0c1020,
+      #070910
+    );
+}
+
+.app.night .weather-panel {
+  background:
+    radial-gradient(
+      circle at 70% 20%,
+      rgba(130, 150, 255, 0.20),
+      transparent 35%
+    ),
+    linear-gradient(
+      160deg,
+      #25395d,
+      #344563,
+      #202b45
+    );
+}
+
+.app.night .chat-panel {
+  background: rgba(8, 11, 18, 0.86);
+}
+
+
+/* =========================================
+   HEADER
+   ========================================= */
+
+.app.morning .app-header,
+.app.afternoon .app-header,
+.app.evening .app-header,
+.app.night .app-header {
+  transition: border-color 1.5s ease;
+}
+
+
+/* =========================================
+   SMOOTH TRANSITIONS
+   ========================================= */
+
+.weather-panel,
+.chat-panel,
+.app-header {
+  transition:
+    background 1.5s ease,
+    border-color 1.5s ease,
+    box-shadow 1.5s ease;
+}
+
+
+/* =========================================
+   NIGHT GLOW
+   ========================================= */
+
+.app.night .weather-panel {
+  box-shadow:
+    0 0 80px rgba(80, 110, 220, 0.12);
+}
+
+
+/* =========================================
+   EVENING GLOW
+   ========================================= */
+
+.app.evening .weather-panel {
+  box-shadow:
+    0 0 80px rgba(230, 120, 90, 0.12);
+}
+
+
+/* =========================================
+   MORNING / AFTERNOON GLOW
+   ========================================= */
+
+.app.morning .weather-panel,
+.app.afternoon .weather-panel {
+  box-shadow:
+    0 0 80px rgba(255, 210, 120, 0.10);
+}
+/* =========================================
+   ATMOSPHERIC WEATHER UI
+   ========================================= */
+
+.app {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* Atmospheric glow across the entire screen */
+.app::before {
+  content: "";
+  position: fixed;
+  inset: -20%;
+  z-index: -2;
+  pointer-events: none;
+
+  background:
+    radial-gradient(
+      circle at 20% 15%,
+      rgba(255, 190, 120, 0.16),
+      transparent 30%
+    ),
+    radial-gradient(
+      circle at 80% 30%,
+      rgba(120, 150, 255, 0.10),
+      transparent 32%
+    );
+
+  filter: blur(20px);
+  animation: atmosphereMove 14s ease-in-out infinite alternate;
+}
+
+@keyframes atmosphereMove {
+  from {
+    transform: scale(1);
+  }
+
+  to {
+    transform: scale(1.08);
+  }
+}
+
+
+/* =========================================
+   TIME ATMOSPHERE
+   ========================================= */
+
+.app.morning::before {
+  background:
+    radial-gradient(
+      circle at 20% 15%,
+      rgba(255, 205, 140, 0.24),
+      transparent 30%
+    ),
+    radial-gradient(
+      circle at 70% 20%,
+      rgba(130, 190, 230, 0.13),
+      transparent 30%
+    );
+}
+
+.app.afternoon::before {
+  background:
+    radial-gradient(
+      circle at 25% 10%,
+      rgba(255, 210, 100, 0.22),
+      transparent 30%
+    ),
+    radial-gradient(
+      circle at 80% 25%,
+      rgba(100, 180, 230, 0.10),
+      transparent 30%
+    );
+}
+
+.app.evening::before {
+  background:
+    radial-gradient(
+      circle at 25% 20%,
+      rgba(255, 135, 95, 0.23),
+      transparent 30%
+    ),
+    radial-gradient(
+      circle at 75% 25%,
+      rgba(150, 100, 210, 0.18),
+      transparent 32%
+    );
+}
+
+.app.night::before {
+  background:
+    radial-gradient(
+      circle at 25% 15%,
+      rgba(80, 110, 230, 0.20),
+      transparent 30%
+    ),
+    radial-gradient(
+      circle at 75% 25%,
+      rgba(120, 80, 200, 0.14),
+      transparent 30%
+    );
+}
+
+
+/* =========================================
+   WEATHER ATMOSPHERE
+   ========================================= */
+
+.app.rain::before {
+  background:
+    radial-gradient(
+      circle at 30% 15%,
+      rgba(60, 130, 190, 0.22),
+      transparent 35%
+    ),
+    radial-gradient(
+      circle at 80% 30%,
+      rgba(90, 120, 170, 0.12),
+      transparent 30%
+    );
+}
+
+.app.storm::before {
+  background:
+    radial-gradient(
+      circle at 45% 15%,
+      rgba(110, 85, 190, 0.20),
+      transparent 30%
+    ),
+    radial-gradient(
+      circle at 70% 60%,
+      rgba(60, 80, 150, 0.14),
+      transparent 35%
+    );
+}
+
+.app.snow::before {
+  background:
+    radial-gradient(
+      circle at 30% 15%,
+      rgba(210, 225, 255, 0.20),
+      transparent 32%
+    ),
+    radial-gradient(
+      circle at 75% 30%,
+      rgba(130, 170, 220, 0.12),
+      transparent 35%
+    );
+}
+
+.app.cloudy::before {
+  background:
+    radial-gradient(
+      circle at 30% 20%,
+      rgba(150, 165, 185, 0.14),
+      transparent 35%
+    ),
+    radial-gradient(
+      circle at 75% 30%,
+      rgba(100, 120, 150, 0.10),
+      transparent 35%
+    );
+}
+
+
+/* =========================================
+   WEATHER PANEL
+   ========================================= */
+
+.weather-panel {
+  position: relative;
+  overflow: hidden;
+
+  background: rgba(255, 255, 255, 0.055) !important;
+
+  border: 1px solid rgba(255, 255, 255, 0.10);
+
+  backdrop-filter: blur(22px);
+
+  box-shadow:
+    0 20px 80px rgba(0, 0, 0, 0.20);
+
+  transition:
+    background 1.2s ease,
+    box-shadow 1.2s ease;
+}
+
+
+/* Soft light inside weather panel */
+.weather-panel::before {
+  content: "";
+  position: absolute;
+
+  width: 420px;
+  height: 420px;
+
+  top: -180px;
+  right: -140px;
+
+  border-radius: 50%;
+
+  background: rgba(255, 220, 140, 0.10);
+
+  filter: blur(70px);
+
+  pointer-events: none;
+}
+
+
+/* =========================================
+   WEATHER CONTENT
+   ========================================= */
+
+.weather-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.weather-location {
+  font-size: 21px;
+  font-weight: 600;
+}
+
+.weather-country {
+  margin-top: 5px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.60);
+}
+
+.weather-time {
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.68);
+  margin-top: 3px;
+}
+
+.weather-main {
+  margin-top: 75px;
+}
+
+.weather-temperature {
+  font-size: 105px;
+  line-height: 0.95;
+  font-weight: 300;
+  letter-spacing: -5px;
+}
+
+.weather-condition {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  margin-top: 15px;
+
+  font-size: 25px;
+  font-weight: 600;
+}
+
+.weather-icon {
+  font-size: 28px;
+}
+
+.weather-description {
+  margin-top: 12px;
+
+  font-size: 15px;
+  line-height: 1.5;
+
+  color: rgba(255, 255, 255, 0.70);
+}
+
+
+/* =========================================
+   STATS
+   ========================================= */
+
+.weather-stats {
+  margin-top: 65px;
+
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+
+  padding-top: 22px;
+
+  display: flex;
+  gap: 60px;
+}
+
+.weather-stats div {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.weather-stats span {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.weather-stats strong {
+  font-size: 17px;
+}
+
+
+/* =========================================
+   RAIN ATMOSPHERE
+   ========================================= */
+
+.app.rain .weather-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+
+  pointer-events: none;
+
+  background:
+    repeating-linear-gradient(
+      105deg,
+      transparent 0,
+      transparent 18px,
+      rgba(180, 210, 240, 0.045) 19px,
+      transparent 20px
+    );
+
+  opacity: 0.7;
+
+  animation: rainMove 0.9s linear infinite;
+}
+
+@keyframes rainMove {
+  from {
+    transform: translateY(-20px);
+  }
+
+  to {
+    transform: translateY(20px);
+  }
+}
+
+
+/* =========================================
+   NIGHT GLOW
+   ========================================= */
+
+.app.night .weather-panel {
+  box-shadow:
+    0 20px 100px rgba(60, 90, 210, 0.12);
+}
+
+.app.night .weather-panel::before {
+  background: rgba(100, 125, 240, 0.12);
+}
+
+
+/* =========================================
+   EVENING GLOW
+   ========================================= */
+
+.app.evening .weather-panel::before {
+  background: rgba(240, 120, 90, 0.12);
+}
+
+
+/* =========================================
+   CHAT PANEL
+   ========================================= */
+
+.chat-panel {
+  background: rgba(8, 11, 16, 0.52) !important;
+
+  backdrop-filter: blur(22px);
+
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+
+  transition: background 1.2s ease;
+}
