@@ -637,12 +637,45 @@ Return JSON only.
 # AUTO LOCATION WEATHER
 # =========================================
 
+
+location_weather_cache = {}
+
+LOCATION_WEATHER_CACHE_SECONDS = 600
+
+
 @app.get("/location-weather")
 def location_weather(latitude: float, longitude: float):
 
+    # Round coordinates so tiny GPS changes do not create
+    # a completely different cache entry.
+    lat_key = round(latitude, 2)
+    lon_key = round(longitude, 2)
+
+    cache_key = f"{lat_key},{lon_key}"
+
+    # -----------------------------------------
+    # CHECK CACHE
+    # -----------------------------------------
+
+    cached = location_weather_cache.get(cache_key)
+
+    if cached:
+        cached_time, cached_result = cached
+
+        if time.time() - cached_time < LOCATION_WEATHER_CACHE_SECONDS:
+            print(
+                "Using cached location weather:",
+                cache_key
+            )
+
+            return cached_result
+
     try:
 
-        # Reverse geocode the user's coordinates to get a place name.
+        # -----------------------------------------
+        # REVERSE GEOCODING
+        # -----------------------------------------
+
         reverse_url = (
             "https://api.bigdatacloud.net/data/"
             "reverse-geocode-client"
@@ -669,13 +702,20 @@ def location_weather(latitude: float, longitude: float):
             or "Your Location"
         )
 
-        country = location_data.get("countryName", "")
+        country = location_data.get(
+            "countryName",
+            ""
+        )
 
         print("AUTO DETECTED CITY:", city)
 
-        # IMPORTANT: use the exact GPS coordinates for weather.
-        # This avoids changing the weather by first looking up a city center.
-        weather_url = "https://api.open-meteo.com/v1/forecast"
+        # -----------------------------------------
+        # WEATHER USING EXACT GPS COORDINATES
+        # -----------------------------------------
+
+        weather_url = (
+            "https://api.open-meteo.com/v1/forecast"
+        )
 
         weather_response = requests.get(
             weather_url,
@@ -693,28 +733,54 @@ def location_weather(latitude: float, longitude: float):
             timeout=15
         )
 
+        # -----------------------------------------
+        # HANDLE RATE LIMIT
+        # -----------------------------------------
+
         if weather_response.status_code == 429:
+
             print("OPEN-METEO AUTO LOCATION RATE LIMIT")
+
+            # Use previous cached data if available
+            if cached:
+                print(
+                    "Returning stale cached location weather:",
+                    cache_key
+                )
+
+                return cached[1]
+
             return {
                 "type": "error",
                 "reply": (
                     "⚠️ The weather service is temporarily busy. "
-                    "Please try again later."
+                    "Please try again in a few minutes."
                 )
             }
 
         weather_response.raise_for_status()
 
         data = weather_response.json()
+
         current = data.get("current")
 
         if not current:
             return {
                 "type": "error",
-                "reply": "⚠️ Current weather data is unavailable right now."
+                "reply": (
+                    "⚠️ Current weather data is "
+                    "unavailable right now."
+                )
             }
 
-        weather_code = current.get("weather_code", -1)
+        # -----------------------------------------
+        # WEATHER CONDITION
+        # -----------------------------------------
+
+        weather_code = current.get(
+            "weather_code",
+            -1
+        )
 
         icon, condition = weather_condition.get(
             weather_code,
@@ -725,32 +791,79 @@ def location_weather(latitude: float, longitude: float):
             "type": "weather",
             "city": city,
             "country": country,
-            "temperature": current.get("temperature_2m", "N/A"),
-            "humidity": current.get("relative_humidity_2m", "N/A"),
-            "wind": current.get("wind_speed_10m", "N/A"),
+            "temperature": current.get(
+                "temperature_2m",
+                "N/A"
+            ),
+            "humidity": current.get(
+                "relative_humidity_2m",
+                "N/A"
+            ),
+            "wind": current.get(
+                "wind_speed_10m",
+                "N/A"
+            ),
             "condition": condition,
             "icon": icon
         }
 
-        print("AUTO LOCATION WEATHER:", result)
+        # -----------------------------------------
+        # SAVE RESULT TO CACHE
+        # -----------------------------------------
+
+        location_weather_cache[cache_key] = (
+            time.time(),
+            result
+        )
+
+        print(
+            "Fresh location weather:",
+            cache_key
+        )
 
         return result
 
     except requests.RequestException as e:
-        print("AUTO LOCATION REQUEST ERROR:", e)
+
+        print(
+            "AUTO LOCATION REQUEST ERROR:",
+            e
+        )
+
+        # Return old cached result if available
+        if cached:
+            print(
+                "Returning stale cached weather:",
+                cache_key
+            )
+
+            return cached[1]
+
         return {
             "type": "error",
-            "reply": "⚠️ Unable to connect to the location or weather service."
+            "reply": (
+                "⚠️ Unable to connect to "
+                "the location or weather service."
+            )
         }
 
     except (KeyError, ValueError, TypeError) as e:
-        print("AUTO LOCATION DATA ERROR:", e)
+
+        print(
+            "AUTO LOCATION DATA ERROR:",
+            e
+        )
+
+        # Return old cached result if available
+        if cached:
+            return cached[1]
+
         return {
             "type": "error",
-            "reply": "⚠️ Invalid weather data was returned."
+            "reply": (
+                "⚠️ Invalid weather data was returned."
+            )
         }
-
-
 # =========================================
 # GROQ GENERAL CHAT
 # =========================================
