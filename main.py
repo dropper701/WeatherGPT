@@ -36,14 +36,22 @@ MODEL = "groq/compound-mini"
 # =========================================
 
 app = FastAPI()
+
+allowed_origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+]
+
+FRONTEND_URL = os.getenv("FRONTEND_URL")
+
+if FRONTEND_URL:
+    allowed_origins.append(FRONTEND_URL.rstrip("/"))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -92,69 +100,7 @@ weather_condition = {
 }
 
 
-# =========================================
-# HOME PAGE
-# =========================================
 
-@app.get("/")
-def home(request: Request):
-    return templates.TemplateResponse(
-        request=request,
-        name="index.html"
-    )
-
-
-# =========================================
-# HELPER: LOCATION
-# =========================================
-
-
-@lru_cache(maxsize=100)
-def get_location(city: str):
-
-    url = "https://geocoding-api.open-meteo.com/v1/search"
-
-    try:
-        response = requests.get(
-            url,
-            params={
-                "name": city,
-                "count": 1,
-                "language": "en",
-                "format": "json"
-            },
-            timeout=10
-        )
-
-        response.raise_for_status()
-
-        data = response.json()
-
-        results = data.get("results")
-
-        if not results:
-            return None
-
-        result = results[0]
-
-        return {
-            "latitude": result["latitude"],
-            "longitude": result["longitude"],
-            "name": result["name"],
-            "country": result.get("country", "")
-        }
-
-    except requests.RequestException as e:
-        print("LOCATION REQUEST ERROR:", e)
-        return None
-
-    except (KeyError, ValueError, TypeError) as e:
-        print("LOCATION DATA ERROR:", e)
-        return None
-
-
-client = Groq(api_key=GROQ_API_KEY)
-MODEL = "groq/compound-mini"
 
 
 # -----------------------------
@@ -696,7 +642,7 @@ def location_weather(latitude: float, longitude: float):
 
     try:
 
-        # Reverse geocode coordinates
+        # Reverse geocode the user's coordinates to get a place name.
         reverse_url = (
             "https://api.bigdatacloud.net/data/"
             "reverse-geocode-client"
@@ -720,38 +666,91 @@ def location_weather(latitude: float, longitude: float):
             location_data.get("city")
             or location_data.get("locality")
             or location_data.get("principalSubdivision")
+            or "Your Location"
         )
 
-        if not city:
-            return {
-                "type": "error",
-                "reply": "Unable to determine your city."
-            }
+        country = location_data.get("countryName", "")
 
         print("AUTO DETECTED CITY:", city)
 
-        # Use your existing weather function
-        weather = get_weather(city)
+        # IMPORTANT: use the exact GPS coordinates for weather.
+        # This avoids changing the weather by first looking up a city center.
+        weather_url = "https://api.open-meteo.com/v1/forecast"
 
-        return weather
+        weather_response = requests.get(
+            weather_url,
+            params={
+                "latitude": latitude,
+                "longitude": longitude,
+                "current": (
+                    "temperature_2m,"
+                    "relative_humidity_2m,"
+                    "wind_speed_10m,"
+                    "weather_code"
+                ),
+                "timezone": "auto"
+            },
+            timeout=15
+        )
+
+        if weather_response.status_code == 429:
+            print("OPEN-METEO AUTO LOCATION RATE LIMIT")
+            return {
+                "type": "error",
+                "reply": (
+                    "⚠️ The weather service is temporarily busy. "
+                    "Please try again later."
+                )
+            }
+
+        weather_response.raise_for_status()
+
+        data = weather_response.json()
+        current = data.get("current")
+
+        if not current:
+            return {
+                "type": "error",
+                "reply": "⚠️ Current weather data is unavailable right now."
+            }
+
+        weather_code = current.get("weather_code", -1)
+
+        icon, condition = weather_condition.get(
+            weather_code,
+            ("🌦️", "Unknown weather")
+        )
+
+        result = {
+            "type": "weather",
+            "city": city,
+            "country": country,
+            "temperature": current.get("temperature_2m", "N/A"),
+            "humidity": current.get("relative_humidity_2m", "N/A"),
+            "wind": current.get("wind_speed_10m", "N/A"),
+            "condition": condition,
+            "icon": icon
+        }
+
+        print("AUTO LOCATION WEATHER:", result)
+
+        return result
 
     except requests.RequestException as e:
-
         print("AUTO LOCATION REQUEST ERROR:", e)
-
         return {
             "type": "error",
-            "reply": "Unable to connect to the location service."
+            "reply": "⚠️ Unable to connect to the location or weather service."
         }
 
-    except Exception as e:
-
-        print("LOCATION WEATHER ERROR:", e)
-
+    except (KeyError, ValueError, TypeError) as e:
+        print("AUTO LOCATION DATA ERROR:", e)
         return {
             "type": "error",
-            "reply": "Unable to load your local weather."
+            "reply": "⚠️ Invalid weather data was returned."
         }
+
+
 # =========================================
 # GROQ GENERAL CHAT
 # =========================================
@@ -897,7 +896,22 @@ def groq_test():
 
 @app.get("/health")
 def health():
-
     return {
         "status": "ok"
     }
+
+
+# =========================================
+# REACT FRONTEND
+# =========================================
+
+if os.path.exists("frontend/dist"):
+    app.mount(
+        "/",
+        StaticFiles(
+            directory="frontend/dist",
+            html=True
+        ),
+        name="frontend"
+    )
+
