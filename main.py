@@ -175,190 +175,197 @@ def get_location(city: str):
     except Exception as e:
         print("LOCATION ERROR:", e)
         return None
+
+
 # =========================================
 # CURRENT WEATHER
 # =========================================
 
 
-def _weatherapi_icon(condition_text: str):
-    text = condition_text.lower()
+def _icon_for_condition(condition: str, is_day: int = 1):
+    """Return a simple UI icon while respecting day/night."""
+    text = (condition or "").lower()
 
-    if "thunder" in text:
+    if "thunder" in text or "storm" in text:
         return "⛈️"
-    if "snow" in text or "sleet" in text or "ice" in text:
+    if "snow" in text or "sleet" in text:
         return "❄️"
     if "rain" in text or "drizzle" in text or "shower" in text:
-        return "🌧️"
+        return "🌧️" if is_day else "🌧️"
     if "fog" in text or "mist" in text:
         return "🌫️"
-    if "overcast" in text:
+    if "cloud" in text or "overcast" in text:
         return "☁️"
-    if "cloud" in text:
-        return "⛅"
     if "clear" in text or "sunny" in text:
-        return "☀️"
-
+        return "☀️" if is_day else "🌙"
     return "🌦️"
 
 
-def get_weather_from_weatherapi(city: str):
-    url = "https://api.weatherapi.com/v1/current.json"
+def _resolve_city(city: str):
+    """Resolve a city name to a sensible populated place using Open-Meteo geocoding."""
+    geocode_url = "https://geocoding-api.open-meteo.com/v1/search"
+    response = requests.get(
+        geocode_url,
+        params={
+            "name": city.strip(),
+            "count": 10,
+            "language": "en",
+            "format": "json",
+        },
+        timeout=10,
+    )
+    response.raise_for_status()
+    results = response.json().get("results", [])
 
+    if not results:
+        return None
+
+    # Prefer exact-name matches, then the most populated result.
+    exact = [
+        r for r in results
+        if r.get("name", "").strip().lower() == city.strip().lower()
+    ]
+    candidates = exact or results
+    return max(candidates, key=lambda r: (r.get("population") or 0))
+
+
+def _get_weatherapi_current(latitude: float, longitude: float):
+    """Fetch current weather from WeatherAPI using exact coordinates."""
+    url = "https://api.weatherapi.com/v1/current.json"
     response = requests.get(
         url,
         params={
             "key": WEATHER_API_KEY,
-            "q": city,
-            "aqi": "no"
+            "q": f"{latitude},{longitude}",
         },
-        timeout=15
+        timeout=15,
     )
-
-    if response.status_code == 429:
-        print("WEATHERAPI CURRENT RATE LIMIT")
-        return None
-
-    if response.status_code >= 400:
-        print("WEATHERAPI CURRENT ERROR:", response.status_code, response.text[:300])
-        return None
-
+    response.raise_for_status()
     data = response.json()
     location = data.get("location", {})
     current = data.get("current", {})
-
     if not current:
-        return None
+        raise ValueError("WeatherAPI returned no current weather data")
 
-    condition_text = current.get("condition", {}).get(
-        "text",
-        "Unknown weather"
-    )
-
+    condition = current.get("condition", {}).get("text", "Unknown weather")
+    is_day = int(current.get("is_day", 1))
     return {
         "type": "weather",
-        "city": location.get("name", city),
+        "city": location.get("name", "Your Location"),
         "country": location.get("country", ""),
         "temperature": current.get("temp_c", "N/A"),
         "humidity": current.get("humidity", "N/A"),
         "wind": current.get("wind_kph", "N/A"),
-        "condition": condition_text,
-        "icon": _weatherapi_icon(condition_text)
+        "condition": condition,
+        "icon": _icon_for_condition(condition, is_day),
+        "is_day": is_day,
     }
 
 
-def get_weather_from_openmeteo(city: str):
-    location = get_location(city)
-
-    if not location:
-        return None
-
+def _get_openmeteo_current(latitude: float, longitude: float, city: str, country: str = ""):
+    """Fetch current weather from Open-Meteo as a fallback."""
     url = "https://api.open-meteo.com/v1/forecast"
-
     response = requests.get(
         url,
         params={
-            "latitude": location["latitude"],
-            "longitude": location["longitude"],
-            "current": "temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code",
-            "timezone": "auto"
+            "latitude": latitude,
+            "longitude": longitude,
+            "current": "temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code,is_day",
+            "timezone": "auto",
         },
-        timeout=15
+        timeout=15,
     )
-
-    if response.status_code == 429:
-        print("OPEN-METEO WEATHER RATE LIMIT")
-        return None
-
     response.raise_for_status()
-
     data = response.json()
     current = data.get("current")
-
     if not current:
-        return None
+        raise ValueError("Open-Meteo returned no current weather data")
 
     weather_code = current.get("weather_code", -1)
-    icon, condition = weather_condition.get(
-        weather_code,
-        ("🌦️", "Unknown weather")
+    default_icon, condition = weather_condition.get(
+        weather_code, ("🌦️", "Unknown weather")
     )
+    is_day = int(current.get("is_day", 1))
+
+    # Fix the clear-sky icon at night.
+    if weather_code == 0 and not is_day:
+        icon = "🌙"
+    else:
+        icon = default_icon
 
     return {
         "type": "weather",
-        "city": location["name"],
-        "country": location.get("country", ""),
+        "city": city,
+        "country": country,
         "temperature": current.get("temperature_2m", "N/A"),
         "humidity": current.get("relative_humidity_2m", "N/A"),
         "wind": current.get("wind_speed_10m", "N/A"),
         "condition": condition,
-        "icon": icon
+        "icon": icon,
+        "is_day": is_day,
     }
 
 
 def get_weather(city: str):
     city_key = city.strip().lower()
 
-    # -----------------------------------------
-    # CHECK CACHE
-    # -----------------------------------------
-
     cached = weather_cache.get(city_key)
-
     if cached:
         cached_time, cached_result = cached
-
         if time.time() - cached_time < WEATHER_CACHE_SECONDS:
             print("Using cached weather for:", city_key)
             return cached_result
 
-    # -----------------------------------------
-    # PRIMARY: WEATHERAPI
-    # FALLBACK: OPEN-METEO
-    # -----------------------------------------
-
     try:
-        result = get_weather_from_weatherapi(city_key)
+        location = _resolve_city(city)
+        if not location:
+            return {
+                "type": "error",
+                "reply": f"❌ I couldn't find the city '{city}'.",
+            }
 
-        if result:
-            weather_cache[city_key] = (
-                time.time(),
-                result
-            )
-            print("Fresh WeatherAPI weather for:", city_key)
-            return result
+        latitude = location["latitude"]
+        longitude = location["longitude"]
+        city_name = location.get("name", city)
+        country = location.get("country", "")
 
-    except Exception as e:
-        print("WEATHERAPI CURRENT REQUEST ERROR:", type(e).__name__, str(e))
-
-    try:
-        result = get_weather_from_openmeteo(city_key)
-
-        if result:
-            weather_cache[city_key] = (
-                time.time(),
-                result
-            )
-            print("Fresh Open-Meteo fallback weather for:", city_key)
-            return result
-
-    except Exception as e:
-        print("OPEN-METEO CURRENT FALLBACK ERROR:", type(e).__name__, str(e))
-
-    # -----------------------------------------
-    # STALE CACHE FALLBACK
-    # -----------------------------------------
-
-    if cached:
-        print("Returning stale cached weather for:", city_key)
-        return cached[1]
-
-    return {
-        "type": "error",
-        "reply": (
-            "⚠️ I couldn't get current weather right now. "
-            "Please try again in a moment."
+        print(
+            "RESOLVED CITY:",
+            city_name,
+            country,
+            latitude,
+            longitude,
         )
-    }
+
+        # WeatherAPI first.
+        try:
+            result = _get_weatherapi_current(latitude, longitude)
+            print("Fresh WeatherAPI city weather:", result["city"], result["country"])
+        except Exception as e:
+            print("WEATHERAPI CITY FAILED, USING OPEN-METEO:", type(e).__name__, str(e))
+            result = _get_openmeteo_current(latitude, longitude, city_name, country)
+            print("Fresh Open-Meteo city fallback:", city_name, country)
+
+        weather_cache[city_key] = (time.time(), result)
+        return result
+
+    except requests.RequestException as e:
+        print("CITY WEATHER REQUEST ERROR:", e)
+        if cached:
+            print("Returning stale cached weather:", city_key)
+            return cached[1]
+        return {
+            "type": "error",
+            "reply": "⚠️ Unable to retrieve weather for that location right now.",
+        }
+    except (KeyError, ValueError, TypeError) as e:
+        print("CITY WEATHER DATA ERROR:", e)
+        if cached:
+            return cached[1]
+        return {
+            "type": "error",
+            "reply": "⚠️ The weather data for that location is unavailable right now.",
+        }
 
 
 # =========================================
@@ -690,6 +697,7 @@ Return JSON only.
 # AUTO LOCATION WEATHER
 # =========================================
 
+
 location_weather_cache = {}
 
 LOCATION_WEATHER_CACHE_SECONDS = 600
@@ -697,212 +705,97 @@ LOCATION_WEATHER_CACHE_SECONDS = 600
 
 @app.get("/location-weather")
 def location_weather(latitude: float, longitude: float):
-
-    # Round coordinates so tiny GPS changes do not create
-    # a completely different cache entry.
+    # Round coordinates so tiny GPS changes share the same cache entry.
     lat_key = round(latitude, 2)
     lon_key = round(longitude, 2)
-
     cache_key = f"{lat_key},{lon_key}"
 
-    # -----------------------------------------
-    # CHECK CACHE
-    # -----------------------------------------
-
     cached = location_weather_cache.get(cache_key)
-
     if cached:
         cached_time, cached_result = cached
-
         if time.time() - cached_time < LOCATION_WEATHER_CACHE_SECONDS:
-            print(
-                "Using cached location weather:",
-                cache_key
-            )
+            print("Using cached location weather:", cache_key)
             return cached_result
 
     city = "Your Location"
     country = ""
 
-    # -----------------------------------------
-    # REVERSE GEOCODING
-    # -----------------------------------------
-
     try:
+        # Reverse geocode only for display; weather still uses exact GPS coordinates.
         reverse_url = (
             "https://api.bigdatacloud.net/data/"
             "reverse-geocode-client"
         )
-
         reverse_response = requests.get(
             reverse_url,
             params={
                 "latitude": latitude,
                 "longitude": longitude,
-                "localityLanguage": "en"
+                "localityLanguage": "en",
             },
-            timeout=10
+            timeout=10,
         )
-
         reverse_response.raise_for_status()
-
         location_data = reverse_response.json()
 
         city = (
             location_data.get("city")
             or location_data.get("locality")
             or location_data.get("principalSubdivision")
-            or "Your Location"
+            or city
         )
-
         country = location_data.get("countryName", "")
 
         print("AUTO DETECTED CITY:", city)
 
-    except Exception as e:
-        print("REVERSE GEOCODING ERROR:", type(e).__name__, str(e))
+        # PRIMARY: WeatherAPI
+        try:
+            result = _get_weatherapi_current(latitude, longitude)
+            # Prefer reverse-geocoded display name, while retaining provider country if useful.
+            result["city"] = city
+            result["country"] = country or result.get("country", "")
+            print("Fresh WeatherAPI location weather:", cache_key)
 
-    # -----------------------------------------
-    # PRIMARY: WEATHERAPI USING EXACT GPS
-    # -----------------------------------------
-
-    try:
-        weather_url = "https://api.weatherapi.com/v1/current.json"
-
-        response = requests.get(
-            weather_url,
-            params={
-                "key": WEATHER_API_KEY,
-                "q": f"{latitude},{longitude}",
-                "aqi": "no"
-            },
-            timeout=15
-        )
-
-        if response.status_code == 429:
-            print("WEATHERAPI AUTO LOCATION RATE LIMIT")
-        elif response.status_code < 400:
-            data = response.json()
-            location_data = data.get("location", {})
-            current = data.get("current", {})
-
-            if current:
-                api_city = location_data.get("name")
-                api_country = location_data.get("country")
-                condition = current.get("condition", {}).get(
-                    "text",
-                    "Unknown weather"
-                )
-
-                result = {
-                    "type": "weather",
-                    "city": api_city or city,
-                    "country": api_country or country,
-                    "temperature": current.get("temp_c", "N/A"),
-                    "humidity": current.get("humidity", "N/A"),
-                    "wind": current.get("wind_kph", "N/A"),
-                    "condition": condition,
-                    "icon": _weatherapi_icon(condition)
-                }
-
-                location_weather_cache[cache_key] = (
-                    time.time(),
-                    result
-                )
-
-                print("Fresh WeatherAPI location weather:", cache_key)
-                return result
-        else:
+        except Exception as e:
+            # FALLBACK: Open-Meteo
             print(
-                "WEATHERAPI AUTO LOCATION ERROR:",
-                response.status_code,
-                response.text[:300]
+                "WEATHERAPI AUTO LOCATION FAILED, USING OPEN-METEO:",
+                type(e).__name__,
+                str(e),
             )
+            result = _get_openmeteo_current(
+                latitude,
+                longitude,
+                city,
+                country,
+            )
+            print("Fresh Open-Meteo location fallback:", cache_key)
 
-    except requests.RequestException as e:
-        print("WEATHERAPI AUTO LOCATION ERROR:", e)
-
-    # -----------------------------------------
-    # FALLBACK: OPEN-METEO USING EXACT GPS
-    # -----------------------------------------
-
-    try:
-        weather_url = "https://api.open-meteo.com/v1/forecast"
-
-        weather_response = requests.get(
-            weather_url,
-            params={
-                "latitude": latitude,
-                "longitude": longitude,
-                "current": (
-                    "temperature_2m,"
-                    "relative_humidity_2m,"
-                    "wind_speed_10m,"
-                    "weather_code"
-                ),
-                "timezone": "auto"
-            },
-            timeout=15
+        location_weather_cache[cache_key] = (
+            time.time(),
+            result,
         )
 
-        if weather_response.status_code == 429:
-            print("OPEN-METEO AUTO LOCATION RATE LIMIT")
-        else:
-            weather_response.raise_for_status()
-
-            data = weather_response.json()
-            current = data.get("current")
-
-            if current:
-                weather_code = current.get("weather_code", -1)
-
-                icon, condition = weather_condition.get(
-                    weather_code,
-                    ("🌦️", "Unknown weather")
-                )
-
-                result = {
-                    "type": "weather",
-                    "city": city,
-                    "country": country,
-                    "temperature": current.get("temperature_2m", "N/A"),
-                    "humidity": current.get("relative_humidity_2m", "N/A"),
-                    "wind": current.get("wind_speed_10m", "N/A"),
-                    "condition": condition,
-                    "icon": icon
-                }
-
-                location_weather_cache[cache_key] = (
-                    time.time(),
-                    result
-                )
-
-                print("Fresh Open-Meteo location fallback:", cache_key)
-                return result
+        return result
 
     except requests.RequestException as e:
-        print("OPEN-METEO AUTO LOCATION ERROR:", e)
+        print("AUTO LOCATION REQUEST ERROR:", e)
+        if cached:
+            print("Returning stale cached location weather:", cache_key)
+            return cached[1]
+        return {
+            "type": "error",
+            "reply": "⚠️ Unable to connect to the location or weather service.",
+        }
+
     except (KeyError, ValueError, TypeError) as e:
-        print("OPEN-METEO AUTO LOCATION DATA ERROR:", e)
-
-    # -----------------------------------------
-    # STALE CACHE FALLBACK
-    # -----------------------------------------
-
-    if cached:
-        print(
-            "Returning stale cached location weather:",
-            cache_key
-        )
-        return cached[1]
-
-    return {
-        "type": "error",
-        "reply": (
-            "⚠️ Both weather services are temporarily unavailable. "
-            "Please try again in a few minutes."
-        )
-    }
+        print("AUTO LOCATION DATA ERROR:", e)
+        if cached:
+            return cached[1]
+        return {
+            "type": "error",
+            "reply": "⚠️ Invalid weather data was returned.",
+        }
 
 
 # =========================================
