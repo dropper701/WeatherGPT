@@ -1,5 +1,7 @@
+from functools import lru_cache
 import os
 import re
+import json
 import requests
 import time
 
@@ -10,7 +12,6 @@ from pydantic import BaseModel
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-
 
 
 # =========================================
@@ -93,7 +94,7 @@ def home(request: Request):
 # =========================================
 # HELPER: LOCATION
 # =========================================
-from functools import lru_cache
+
 
 @lru_cache(maxsize=100)
 def get_location(city: str):
@@ -137,6 +138,7 @@ def get_location(city: str):
     except (KeyError, ValueError, TypeError) as e:
         print("LOCATION DATA ERROR:", e)
         return None
+
 
 client = Groq(api_key=GROQ_API_KEY)
 MODEL = "groq/compound-mini"
@@ -212,6 +214,8 @@ def get_location(city: str):
 # =========================================
 # CURRENT WEATHER
 # =========================================
+
+
 def get_weather(city: str):
 
     city_key = city.strip().lower()
@@ -516,7 +520,7 @@ def get_forecast(city: str):
             params={
                 "latitude": location["latitude"],
                 "longitude": location["longitude"],
-                "daily":"temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code",
+                "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code",
                 "forecast_days": 2,
                 "timezone": "auto"
             },
@@ -589,7 +593,7 @@ def get_7day_forecast(city: str):
             params={
                 "latitude": location["latitude"],
                 "longitude": location["longitude"],
-                "daily":"weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
+                "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
                 "forecast_days": 7,
                 "timezone": "auto"
             },
@@ -649,107 +653,142 @@ def get_7day_forecast(city: str):
         return {
             "reply": "⚠️ The 7-day forecast is unavailable right now."
         }
-
-
 # =========================================
-# FIND CITY FROM WEATHER MESSAGE
+# AI WEATHER REQUEST UNDERSTANDING
 # =========================================
 
-def extract_city(message: str):
 
-    text = message.strip()
+def understand_weather_request(message: str):
 
-    patterns = [
-        r"(?:weather|temperature|forecast)\s+(?:in|at|for)\s+(.+?)(?:\s+tomorrow|\s+today)?$",
+    try:
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": """
+You are the weather request analyzer for WeatherGPT.
 
-        r"(?:what(?:'s| is)\s+)?(?:the\s+)?weather\s+(?:in|at|for)\s+(.+)$",
+Determine whether the user's message is asking about weather.
 
-        r"(?:forecast)\s+(?:in|at|for)\s+(.+)$",
+If it is a weather request, extract:
+1. The city or location
+2. The time period
 
-        r"(?:in|at|for)\s+([A-Za-z .'-]+)$"
-    ]
+Return ONLY valid JSON in this exact format:
 
-    for pattern in patterns:
+{
+    "is_weather": true,
+    "city": "Toronto",
+    "type": "current"
+}
 
-        match = re.search(
-            pattern,
-            text,
-            re.IGNORECASE
+Rules:
+
+- The city can be ANY city, town, location, or place.
+- Never assume the city is Delhi or any other fixed city.
+- "current" means current weather, today, or no future time specified.
+- "tomorrow" means tomorrow.
+- "seven_day" means 7 day, seven day, weekly, this week, or next few days.
+
+Examples:
+
+"What is the weather of Delhi?"
+{
+    "is_weather": true,
+    "city": "Delhi",
+    "type": "current"
+}
+
+"How's Mumbai today?"
+{
+    "is_weather": true,
+    "city": "Mumbai",
+    "type": "current"
+}
+
+"Toronto weather?"
+{
+    "is_weather": true,
+    "city": "Toronto",
+    "type": "current"
+}
+
+"Tell me the temperature of London"
+{
+    "is_weather": true,
+    "city": "London",
+    "type": "current"
+}
+
+"Will it rain in Vancouver tomorrow?"
+{
+    "is_weather": true,
+    "city": "Vancouver",
+    "type": "tomorrow"
+}
+
+"What's the weather like in Shimla this week?"
+{
+    "is_weather": true,
+    "city": "Shimla",
+    "type": "seven_day"
+}
+
+If the user asks about weather but gives no city:
+
+{
+    "is_weather": true,
+    "city": null,
+    "type": "current"
+}
+
+If the user is NOT asking about weather:
+
+{
+    "is_weather": false,
+    "city": null,
+    "type": "current"
+}
+
+Do not answer the user.
+Return JSON only.
+"""
+                },
+                {
+                    "role": "user",
+                    "content": message
+                }
+            ],
+            temperature=0,
+            max_completion_tokens=150
         )
 
-        if match:
+        content = response.choices[0].message.content.strip()
 
-            city = match.group(1).strip()
+        content = re.sub(r"```json\s*", "", content)
+        content = re.sub(r"```\s*", "", content)
 
-            city = re.sub(
-                r"\b(today|tomorrow|this week|next week)\b",
-                "",
-                city,
-                flags=re.IGNORECASE
-            ).strip()
+        result = json.loads(content)
 
-            if city:
-                return city
+        return result
 
-    return None
+    except Exception as e:
+        print(
+            "WEATHER UNDERSTANDING ERROR:",
+            type(e).__name__,
+            str(e)
+        )
 
-
-# =========================================
-# DETECT WEATHER REQUEST TYPE
-# =========================================
-
-def detect_weather_request(message: str):
-
-    text = message.lower().strip()
-
-    weather_words = [
-        "weather",
-        "temperature",
-        "forecast",
-        "rain",
-        "snow",
-        "humid",
-        "humidity"
-    ]
-
-    if not any(word in text for word in weather_words):
-        return None
-
-    city = extract_city(message)
-
-    if not city:
         return {
-            "type": "missing_city",
-            "city": None
+            "is_weather": False,
+            "city": None,
+            "type": "current"
         }
-
-    if (
-        "7 day" in text
-        or "7-day" in text
-        or "seven day" in text
-        or "weekly forecast" in text
-        or "week forecast" in text
-    ):
-        return {
-            "type": "seven_day",
-            "city": city
-        }
-
-    if "tomorrow" in text:
-        return {
-            "type": "tomorrow",
-            "city": city
-        }
-
-    return {
-        "type": "current",
-        "city": city
-    }
-
-
 # =========================================
 # GROQ GENERAL CHAT
 # =========================================
+
 
 def ask_ai(message: str):
 
@@ -841,33 +880,25 @@ def chat(request: ChatRequest):
     # WEATHER REQUEST
     # -------------------------------------
 
-    weather_request = detect_weather_request(user_message)
+    weather_request = understand_weather_request(user_message)
 
-    if weather_request:
+    if weather_request.get("is_weather"):
 
-        request_type = weather_request["type"]
+        request_type = weather_request.get("type", "current")
+        city = weather_request.get("city")
 
-        city = weather_request["city"]
-
-        if request_type == "missing_city":
-
+        if not city:
             return {
-                "reply": (
-                    "🌍 Please tell me the city.\n"
-                    "For example: Weather in Delhi"
-                )
+                "reply": "🌍 Which city would you like the weather for?"
             }
 
         if request_type == "current":
-
             return get_weather(city)
 
         if request_type == "tomorrow":
-
             return get_forecast(city)
 
         if request_type == "seven_day":
-
             return get_7day_forecast(city)
 
     # -------------------------------------
