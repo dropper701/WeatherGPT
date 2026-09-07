@@ -117,6 +117,13 @@ forecast_cache = {}
 WEATHER_CACHE_SECONDS = 300
 FORECAST_CACHE_SECONDS = 1800
 
+#============================
+#PENDING WEATHER REQUEST
+#============================
+pending_weather_request ={
+    "type":None
+}
+
 
 # -----------------------------
 # LOCATION
@@ -345,7 +352,10 @@ def get_weather(city: str):
             print("WEATHERAPI CITY FAILED, USING OPEN-METEO:", type(e).__name__, str(e))
             result = _get_openmeteo_current(latitude, longitude, city_name, country)
             print("Fresh Open-Meteo city fallback:", city_name, country)
+        natural_reply = make_natural_weather_response(result)
 
+        if natural_reply:
+            result["reply"] = natural_reply     
         weather_cache[city_key] = (time.time(), result)
         return result
 
@@ -453,6 +463,10 @@ def get_forecast(city: str):
             "condition": condition,
             "icon": icon
         }
+        natural_reply = make_natural_weather_response(result)
+
+        if natural_reply:
+          result["reply"] = natural_reply
 
         forecast_cache[cache_key] = (
             time.time(),
@@ -691,7 +705,119 @@ Return JSON only.
             "city": None,
             "type": "current"
         }
+# =========================================
+# NATURAL WEATHER RESPONSES
+# =========================================
 
+def make_natural_weather_response(weather_data):
+
+    try:
+
+        weather_type = weather_data.get("type", "weather")
+
+        # ---------------------------------
+        # CURRENT WEATHER
+        # ---------------------------------
+
+        if weather_type == "weather":
+
+            prompt = f"""
+You are WeatherGPT, a friendly and conversational AI weather assistant.
+
+Create a natural response using ONLY the verified weather data below.
+
+City: {weather_data.get("city")}
+Country: {weather_data.get("country")}
+Temperature: {weather_data.get("temperature")}°C
+Condition: {weather_data.get("condition")}
+Humidity: {weather_data.get("humidity")}%
+Wind speed: {weather_data.get("wind")} km/h
+
+Rules:
+- Sound natural and friendly.
+- Do NOT simply list the values.
+- Explain the weather conversationally.
+- Mention the temperature and condition naturally.
+- You may mention humidity and wind naturally.
+- Give one short practical suggestion if useful.
+- Do NOT invent information.
+- Keep the response between 2 and 4 sentences.
+- Use simple language.
+"""
+
+        # ---------------------------------
+        # TOMORROW WEATHER
+        # ---------------------------------
+
+        elif weather_type == "tomorrow":
+
+            prompt = f"""
+You are WeatherGPT, a friendly and conversational AI weather assistant.
+
+Create a natural response using ONLY the verified forecast data below.
+
+City: {weather_data.get("city")}
+Country: {weather_data.get("country")}
+Tomorrow's condition: {weather_data.get("condition")}
+Maximum temperature: {weather_data.get("temperature_max")}°C
+Minimum temperature: {weather_data.get("temperature_min")}°C
+Rain probability: {weather_data.get("rain_probability")}%
+
+Rules:
+- Sound natural and conversational.
+- Clearly say this is TOMORROW'S forecast.
+- Do NOT simply list the values.
+- Explain whether it may be warm, cool, rainy, etc. ONLY when supported by the data.
+- Give one useful suggestion if appropriate.
+- Do NOT invent information.
+- Keep it between 2 and 4 sentences.
+"""
+
+        else:
+            return None
+
+
+        response = client.chat.completions.create(
+
+            model=MODEL,
+
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are WeatherGPT. "
+                        "Turn verified weather data into natural, "
+                        "friendly responses without inventing facts."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+
+            temperature=0.5,
+            max_completion_tokens=200
+        )
+
+
+        reply = response.choices[0].message.content
+
+        if reply:
+            return reply.strip()
+
+        return None
+
+
+    except Exception as e:
+
+        print(
+            "NATURAL WEATHER RESPONSE ERROR:",
+            type(e).__name__,
+            str(e)
+        )
+
+        return None
 
 # =========================================
 # AUTO LOCATION WEATHER
@@ -863,10 +989,12 @@ def chat(request: ChatRequest):
             "reply": "Please enter a message."
         }
 
+
     text = user_message.lower()
 
+
     # -------------------------------------
-    # GREETINGS - NO AI REQUEST
+    # GREETINGS
     # -------------------------------------
 
     greetings = [
@@ -880,48 +1008,146 @@ def chat(request: ChatRequest):
         "good evening"
     ]
 
+
     if text in greetings:
 
         return {
             "reply": (
-                "Hello! 👋 I'm WeatherGPT 🌦️\n"
-                "Ask me about the weather in any city."
+                "Hello! 👋 I'm WeatherGPT 🌦️ "
+                "You can ask me about the current weather, "
+                "tomorrow's forecast, or the 7-day forecast for any city."
             )
         }
 
-    # -------------------------------------
-    # WEATHER REQUEST
-    # -------------------------------------
+
+    # =====================================
+    # CHECK IF WE ARE WAITING FOR A CITY
+    # =====================================
+
+    pending_type = pending_weather_request.get("type")
+
+
+    if pending_type:
+
+        city = user_message.strip()
+
+
+        # Clear the pending request
+        pending_weather_request["type"] = None
+
+
+        print("PENDING WEATHER CITY:", city)
+        print("PENDING WEATHER TYPE:", pending_type)
+
+
+        # CURRENT WEATHER
+        if pending_type == "current":
+
+            return get_weather(city)
+
+
+        # TOMORROW WEATHER
+        elif pending_type == "tomorrow":
+
+            return get_forecast(city)
+
+
+        # 7 DAY WEATHER
+        elif pending_type == "seven_day":
+
+            return get_7day_forecast(city)
+
+
+    # =====================================
+    # WEATHER REQUEST UNDERSTANDING
+    # =====================================
 
     weather_request = understand_weather_request(user_message)
 
+
     if weather_request.get("is_weather"):
+
 
         request_type = weather_request.get("type", "current")
         city = weather_request.get("city")
 
+
+        # ---------------------------------
+        # WEATHER QUESTION WITHOUT CITY
+        # ---------------------------------
+
         if not city:
-            return {
-                "reply": "🌍 Which city would you like the weather for?"
-            }
+
+
+            # Remember what type of weather
+            # the user asked for
+            pending_weather_request["type"] = request_type
+
+
+            if request_type == "tomorrow":
+
+                return {
+                    "reply": (
+                        "Sure! 😊 Which city would you like "
+                        "tomorrow's weather forecast for?"
+                    )
+                }
+
+
+            elif request_type == "seven_day":
+
+                return {
+                    "reply": (
+                        "Of course! 🌦️ Which city would you like "
+                        "the 7-day forecast for?"
+                    )
+                }
+
+
+            else:
+
+                return {
+                    "reply": (
+                        "Sure! 😊 Which city's weather would "
+                        "you like me to check?"
+                    )
+                }
+
+
+        # ---------------------------------
+        # CURRENT WEATHER
+        # ---------------------------------
 
         if request_type == "current":
+
             return get_weather(city)
 
-        if request_type == "tomorrow":
+
+        # ---------------------------------
+        # TOMORROW WEATHER
+        # ---------------------------------
+
+        elif request_type == "tomorrow":
+
             return get_forecast(city)
 
-        if request_type == "seven_day":
+
+        # ---------------------------------
+        # 7 DAY FORECAST
+        # ---------------------------------
+
+        elif request_type == "seven_day":
+
             return get_7day_forecast(city)
 
-    # -------------------------------------
+
+    # =====================================
     # GENERAL AI QUESTION
-    # -------------------------------------
+    # =====================================
 
     return {
         "reply": ask_ai(user_message)
     }
-
 
 # =========================================
 # GROQ TEST
